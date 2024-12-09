@@ -11,7 +11,6 @@ import static org.junit.jupiter.api.Assertions.*;
 class GenericHashMapTest {
 
     GenericHashMap<Integer, String> genericHashMap;
-//    CacheEntry<V> cacheEntry = new CacheEntry<V>(value,ttl);
 
     @BeforeEach
     void setUp() {
