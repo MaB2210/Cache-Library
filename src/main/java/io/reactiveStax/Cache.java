@@ -4,30 +4,37 @@ package io.reactiveStax;
 import java.util.Set;
 import java.util.concurrent.*;
 
-public class GenericHashMap<K, V> implements CacheHashMap<K, V> {
+public class Cache<K, V> implements CacheHashMap<K, V> {
     ConcurrentHashMap<K, CacheEntry<V>> concurrentHashMap = new ConcurrentHashMap<>();
     private final long DEFAULT_TTL = 60;
     private ScheduledExecutorService executorService;
+    private EvictionPolicyManagerService<K, V> evictionPolicyManagerService;
 
-    public GenericHashMap() {
+    public Cache(ConcurrentHashMap<K,CacheEntry<V>>concurrentHashMap) {
+        this.concurrentHashMap = concurrentHashMap;
         startCleanUpThread();
     }
 
-    public void startCleanUpThread(){
-         executorService = Executors.newSingleThreadScheduledExecutor(runnable ->{
+    public void startCleanUpThread() {
+        executorService = Executors.newSingleThreadScheduledExecutor(runnable -> {
             Thread thread = new Thread(runnable);
             thread.setDaemon(true);
             return thread;
         });
-        executorService.scheduleAtFixedRate(() -> {
-            for(K key : concurrentHashMap.keySet()){
-                CacheEntry<V> entry = concurrentHashMap.get(key);
-                if(entry!= null && entry.isExpired()){
-                    concurrentHashMap.remove(key);
-                }
-            }
-        },0,1, TimeUnit.SECONDS);
+        evictionPolicyManagerService = new EvictionPolicyManagerService<>(concurrentHashMap, executorService);
     }
+
+    public void evictionPolicyProvider(EvictionPolicy policy) {
+        switch (policy) {
+            case TTL -> evictionPolicyManagerService.applyTTLEvictionPolicy();
+            case LRU -> evictionPolicyManagerService.applyLRUEvictionPolicy();
+            case FIFO -> evictionPolicyManagerService.applyFIFOEvictionPolicy();
+            case LFU -> evictionPolicyManagerService.applyLFUEvictionPolicy();
+            case RANDOM -> evictionPolicyManagerService.applyRandomReplacement();
+            default -> throw new IllegalArgumentException("INVALID EVICTION POLICY");
+        }
+    }
+
 
     @Override
     public void put(K key, V value) {
@@ -49,7 +56,6 @@ public class GenericHashMap<K, V> implements CacheHashMap<K, V> {
         }
         cacheEntry.UpdateLastAccessTime();
         return cacheEntry.getValue();
-
     }
 
     @Override
@@ -77,8 +83,8 @@ public class GenericHashMap<K, V> implements CacheHashMap<K, V> {
         return concurrentHashMap.keySet();
     }
 
-    public Boolean shutDown(){
-        if(executorService != null && !executorService.isShutdown()){
+    public Boolean shutDown() {
+        if (executorService != null && !executorService.isShutdown()) {
             executorService.shutdown();
         }
         System.out.println("EXECUTOR SERVICE SHUT DOWN!!");
